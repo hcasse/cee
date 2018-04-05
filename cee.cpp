@@ -4,6 +4,8 @@
 #include <otawa/cfg/features.h>
 #include <otawa/hard/CacheConfiguration.h>
 
+#include "pidcache/PIDCache.h"
+
 using namespace elm;
 using namespace otawa;
 
@@ -11,7 +13,9 @@ class CEE: public Application {
 public:
 	CEE(void): Application("CEE", Version(1, 0, 0)),
 	quiet(option::SwitchOption::Make(*this).cmd("-q").cmd("--quiet").description("Do not display header line")),
-	dcache(option::SwitchOption::Make(*this).cmd("-d").cmd("--dcache").description("Perform simple data cache analysis"))
+	dcache(option::SwitchOption::Make(*this).cmd("-d").cmd("--dcache").description("Perform simple data cache analysis")),
+	pcache(option::SwitchOption::Make(*this).cmd("-p").cmd("--pidcache").description("Perform PID data cache analysis")),
+	icache(option::SwitchOption::Make(*this).cmd("-i").cmd("--icache").description("Perform instruction cache analysis"))
 	{
 	}
 	
@@ -64,7 +68,6 @@ protected:
 		require(dcache::CATEGORY_FEATURE);
 		
 		// compute statistics
-		// compute statistics
 		t::uint64
 			cnt = 0,
 			ah = 0,
@@ -96,6 +99,41 @@ protected:
 			<< io::endl;
 	}
 
+	void performPIDCacheAnalysis(void) {
+		
+		// perform analysis
+		require(pidcache::ANALYSIS_FEATURE);
+
+		// compute statistics
+		t::uint64
+			cnt = 0,
+			ah = 0,
+			am = 0,
+			pe = 0,
+			nc = 0;
+		const CFGCollection& coll = **INVOLVED_CFGS(workspace());
+		for(int i = 0; i < coll.count(); i++)
+			for(CFG::BBIterator bb(coll.get(i)); bb; bb++) {
+				const Bag<pidcache::PolyAccess> &accs = pidcache::ACCESSES(bb);
+				for(int i = 0; i < accs.count(); i++) {
+					struct pidcache::stat_t s = pidcache::STAT(accs[i]);
+					cnt += s.total();
+					ah += s.ah;
+					am += s.am;
+					pe += s.pe;
+					nc += s.nc + s.mm;
+				}
+			}
+		cout
+			<< io::width(8, cnt).right()
+			<< io::width(8, ah).right()
+			<< io::width(8, am).right()
+			<< io::width(8, pe).right()
+			<< io::width(8, nc).right()
+			<< ' ' << workspace()->process()->program()->name()
+			<< io::endl;
+	}
+
 	void work(const string& task, PropList& props) throw(elm::Exception) {
 		require(VIRTUALIZED_CFG_FEATURE);
 		CACHE_CONFIG_PATH(props) = "cache.xml";
@@ -110,15 +148,21 @@ protected:
 				<< " Benchmark"
 				<< io::endl;
 		
-		performICacheAnalysis();
+		if(icache || (!dcache && !pcache))
+			performICacheAnalysis();
 		
 		if(dcache)
 			performDCacheAnalysis();
+			
+		if(pcache)
+			performPIDCacheAnalysis();
 	}
 
 private:
 	option::SwitchOption quiet;
+	option::SwitchOption icache;
 	option::SwitchOption dcache;
+	option::SwitchOption pcache;
 };
 
 OTAWA_RUN(CEE);

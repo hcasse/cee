@@ -3,8 +3,15 @@ CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
 
 # configuration
 set(PROGRAM		"cee")
-set(SOURCES		"cee.cpp")
 set(MODULES		"otawa/dcache")
+set(SOURCES
+	"cee.cpp"
+	"pidcache/hook.cpp"
+	"pidcache/pidcache_PolyAccessBuilder.cpp"
+	"pidcache/pidcache_Poly.cpp"
+	"pidcache/pidcache_PIDCache.cpp"
+	"pidcache/pidcache_PolyAnalysis.cpp"
+	"pidcache/pidcache_RefManager.cpp")
 
 # look for OTAWA
 if(NOT OTAWA_CONFIG)
