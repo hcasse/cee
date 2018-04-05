@@ -4,6 +4,7 @@ CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
 # configuration
 set(PROGRAM		"cee")
 set(SOURCES		"cee.cpp")
+set(MODULES		"otawa/dcache")
 
 # look for OTAWA
 if(NOT OTAWA_CONFIG)
