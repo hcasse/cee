@@ -3,7 +3,8 @@ CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
 
 # configuration
 set(PROGRAM		"cee")
-set(MODULES		"otawa/dcache")
+set(MODULES		"otawa/dcache"
+				"otawa/etime")
 set(SOURCES
 	"cee.cpp"
 	"pidcache/hook.cpp"

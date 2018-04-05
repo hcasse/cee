@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<processor class="otawa::hard::Processor"  xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+
+	<arch>arm</arch>
+	<model>arm9</model>
+	<builder>OTAWA</builder>
+	
+	<stages>
+		<stage id="FE">
+			<name>Fetch</name>
+			<width>1</width>
+			<type>FETCH</type>
+		</stage>
+		<stage id="DE">
+			<name>Decode</name>
+			<width>1</width>
+			<type>LAZY</type>
+		</stage>
+		
+		<stage id="EX">
+			<name>Execute</name>
+			<type>EXEC</type>
+			<width>1</width>
+			<ordered>true</ordered>
+			
+			<fus>
+				<fu id="ALU">
+					<name>ALU</name>
+					<width>1</width>
+				</fu>
+			</fus>
+			
+			<dispatch>
+				<inst>
+					<type></type><fu ref="ALU"/>
+				</inst>
+			</dispatch>
+
+		</stage>
+		
+		<stage id="ME">
+			<name>Memory</name>
+			<type>LAZY</type>
+			<width>1</width>
+			<latency>1</latency>
+			<mem>true</mem>
+		</stage>
+		
+		<stage id="WR">
+			<name>Write</name>
+			<type>COMMIT</type>
+			<width>1</width>
+			<latency>1</latency>
+		</stage>
+
+		
+	</stages>
+	
+</processor>

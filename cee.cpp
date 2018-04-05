@@ -3,6 +3,8 @@
 #include <otawa/dcache/features.h>
 #include <otawa/cfg/features.h>
 #include <otawa/hard/CacheConfiguration.h>
+#include <otawa/etime/features.h>
+#include <otawa/ipet/features.h>
 
 #include "pidcache/PIDCache.h"
 
@@ -15,7 +17,8 @@ public:
 	quiet(option::SwitchOption::Make(*this).cmd("-q").cmd("--quiet").description("Do not display header line")),
 	dcache(option::SwitchOption::Make(*this).cmd("-d").cmd("--dcache").description("Perform simple data cache analysis")),
 	pcache(option::SwitchOption::Make(*this).cmd("-p").cmd("--pidcache").description("Perform PID data cache analysis")),
-	icache(option::SwitchOption::Make(*this).cmd("-i").cmd("--icache").description("Perform instruction cache analysis"))
+	icache(option::SwitchOption::Make(*this).cmd("-i").cmd("--icache").description("Perform instruction cache analysis")),
+	wcet(option::SwitchOption::Make(*this).cmd("-w").cmd("--wcet").description("Compute the WCET"))
 	{
 	}
 	
@@ -25,6 +28,8 @@ protected:
 		// launch instruction cache analysis
 		require(ICACHE_ACS_MAY_FEATURE);
 		require(ICACHE_CATEGORY2_FEATURE);
+		if(wcet)
+			require(ICACHE_ONLY_CONSTRAINT2_FEATURE);
 
 		// compute statistics
 		t::uint64
@@ -60,12 +65,13 @@ protected:
 	}
 
 	void performDCacheAnalysis(void) {
-		// TODO fix list of features in OTAWA documentation
 		
 		// data cache analysis
 		require(dcache::CLP_BLOCK_FEATURE);
 		require(dcache::MAY_ACS_FEATURE);
 		require(dcache::CATEGORY_FEATURE);
+		if(wcet)
+			require(dcache::CONSTRAINTS_FEATURE);
 		
 		// compute statistics
 		t::uint64
@@ -134,9 +140,25 @@ protected:
 			<< io::endl;
 	}
 
+	void computeWCET(void) {
+		// TODO add etime feature to the feature list
+		
+		// compute block time
+		require(etime::EDGE_TIME_FEATURE);
+		
+		// compute WCET
+		require(ipet::WCET_FEATURE);
+		
+		// display result
+		if(!quiet)
+			cout << "WCET = ";
+		cout << ipet::WCET(workspace()) << io::endl;
+	}
+
 	void work(const string& task, PropList& props) throw(elm::Exception) {
 		require(VIRTUALIZED_CFG_FEATURE);
 		CACHE_CONFIG_PATH(props) = "cache.xml";
+		PROCESSOR_PATH(props) = "pipeline.xml";
 
 		if(!quiet)
 			cout
@@ -148,7 +170,7 @@ protected:
 				<< " Benchmark"
 				<< io::endl;
 		
-		if(icache || (!dcache && !pcache))
+		if(icache)
 			performICacheAnalysis();
 		
 		if(dcache)
@@ -156,6 +178,9 @@ protected:
 			
 		if(pcache)
 			performPIDCacheAnalysis();
+		
+		if(wcet)
+			computeWCET();
 	}
 
 private:
@@ -163,6 +188,7 @@ private:
 	option::SwitchOption icache;
 	option::SwitchOption dcache;
 	option::SwitchOption pcache;
+	option::SwitchOption wcet;
 };
 
 OTAWA_RUN(CEE);
