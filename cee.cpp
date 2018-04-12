@@ -5,6 +5,9 @@
 #include <otawa/hard/CacheConfiguration.h>
 #include <otawa/etime/features.h>
 #include <otawa/ipet/features.h>
+#include <elm/sys/System.h>
+#include <otawa/display/CFGOutput.h>
+#include <otawa/display/ILPSystemDisplayer.h>
 
 #include "pidcache/PIDCache.h"
 
@@ -109,6 +112,8 @@ protected:
 		
 		// perform analysis
 		require(pidcache::ANALYSIS_FEATURE);
+		if(wcet)
+			require(pidcache::EVENT_FEATURE);
 
 		// compute statistics
 		t::uint64
@@ -118,7 +123,7 @@ protected:
 			pe = 0,
 			nc = 0;
 		const CFGCollection& coll = **INVOLVED_CFGS(workspace());
-		for(int i = 0; i < coll.count(); i++)
+		/*for(int i = 0; i < coll.count(); i++)
 			for(CFG::BBIterator bb(coll.get(i)); bb; bb++) {
 				const Bag<pidcache::PolyAccess> &accs = pidcache::ACCESSES(bb);
 				for(int i = 0; i < accs.count(); i++) {
@@ -128,6 +133,20 @@ protected:
 					am += s.am;
 					pe += s.pe;
 					nc += s.nc + s.mm;
+				}
+			}*/
+		for(int i = 0; i < coll.count(); i++)
+			for(CFG::BBIterator bb(coll.get(i)); bb; bb++) {
+				const Bag<pidcache::PolyAccess>& accs = pidcache::ACCESSES(bb);
+				for(int i = 0; i < accs.count(); i++) {
+					switch(cache::CATEGORY(accs[i])) {
+					case ALWAYS_HIT:		ah++; break;
+					case ALWAYS_MISS:		am++; break;
+					case FIRST_MISS:		pe++; break;
+					case NOT_CLASSIFIED:	nc++; break;
+					default:				ASSERTP(false, accs[i].inst()->address()); break;
+					}
+					cnt++;
 				}
 			}
 		cout
@@ -153,9 +172,36 @@ protected:
 		if(!quiet)
 			cout << "WCET = ";
 		cout << ipet::WCET(workspace()) << io::endl;
+
+		// compute name base
+		string base;
+		if(pcache)
+			base = "pcache";
+		else
+			base = "dcache";
+
+		// output ILP
+		ilp::System *sys = ipet::SYSTEM(workspace());
+		if(sys) {
+			OutStream *out = elm::sys::System::createFile(base + ".lp");
+			sys->dumpLPSolve(*out);
+			Output output(*out);
+			sys->dumpSolution(output);
+			delete out;
+		}
+
+		// output the .dot
+		display::CFGOutput cfg_out;
+		PropList props;
+		cfg_out.process(workspace(), props);
+
+		display::ILPSystemDisplayer ilp_display;
+		display::ILPSystemDisplayer::PATH(props) = base + ".html";
+		ilp_display.process(workspace(), props);
 	}
 
 	void work(const string& task, PropList& props) throw(elm::Exception) {
+		ipet::EXPLICIT(props) = true;
 		require(VIRTUALIZED_CFG_FEATURE);
 		CACHE_CONFIG_PATH(props) = "cache.xml";
 		PROCESSOR_PATH(props) = "pipeline.xml";

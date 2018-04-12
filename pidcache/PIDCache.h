@@ -28,39 +28,12 @@
 #include <otawa/util/FlowFactLoader.h>
 #include <otawa/util/Bag.h>
 #include "PolyAnalysis.h"
+#include "features.h"
 #include <otawa/util/Dominance.h>
 
 namespace otawa { namespace pidcache {
 
 using namespace elm;
-
-// PolyAccess class
-class PolyAccess: public PropList {
-public:
-	typedef enum {
-		NONE = 0,
-		LOAD = 1,
-		STORE = 2
-	} access_t;
-	typedef Poly::t ref_t;
-
-	inline PolyAccess(void): _inst(0), _access(NONE), _ref(0), _cached(false) { }
-	inline PolyAccess(Inst *inst, access_t access, ref_t ref, bool cached = true)
-		: _inst(inst), _access(access), _ref(ref), _cached(cached) { }
-	inline operator bool(void) const { return _access != NONE; }
-	inline Inst *inst(void) const { return _inst; }
-	inline access_t access(void) const { return _access; }
-	inline ref_t ref(void) const { return _ref; }
-	inline bool cached(void) const { return _cached; }
-	void print(io::Output& out, const Poly& poly) const;
-
-private:
-	Inst *_inst;
-	access_t _access: 8;
-	bool _cached: 1;
-	ref_t _ref;
-};
-
 
 // RefManager class
 class RefManager {
@@ -156,6 +129,8 @@ typedef struct stat_t {
 } stat_t;
 
 extern Identifier<stat_t> STAT;
+
+extern p::feature EVENT_FEATURE;
 
 } }		// otawa::pidcache
 

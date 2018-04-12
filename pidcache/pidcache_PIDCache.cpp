@@ -25,6 +25,7 @@
 #include <otawa/util/FlowFactLoader.h>
 #include <otawa/hard/Memory.h>
 #include <otawa/dfa/ai.h>
+#include <otawa/cache/categories.h>
 
 #include "PIDCache.h"
 #include "PIDAnalysis.h"
@@ -386,6 +387,36 @@ public:
 	}
 
 	/**
+	 * Join 2 categories to get the more generic one.
+	 * @param c1	First category.
+	 * @param c2	Second category.
+	 * @return		Joined category.
+	 */
+	cache::category_t joinCat(cache::category_t c1, cache::category_t c2) {
+		if(c1 == c2)
+			return c1;
+		else if(c1 == cache::INVALID_CATEGORY)
+			return c2;
+		else if(c2 == cache::INVALID_CATEGORY)
+			return c1;
+		else if(c1 == NOT_CLASSIFIED || c2 == NOT_CLASSIFIED)
+			return NOT_CLASSIFIED;
+		else
+			return NOT_CLASSIFIED;
+	}
+
+	/**
+	 * Join the given category with the category found in the given access.
+	 * @param acc	Access to assign category to.
+	 * @param cat	Category to join.
+	 */
+	void assignCat(PolyAccess& acc, cache::category_t cat) {
+		//cerr << "DEBUG: assign at " << acc.inst()->address() << " (" << *cache::CATEGORY(acc) << ") with " << cat << " => ";
+		cache::CATEGORY(acc) = joinCat(cache::CATEGORY(acc), cat);
+		//cerr << *cache::CATEGORY(acc) << io::endl;
+	}
+
+	/**
 	 * Count the number of misses for the current line.
 	 * @param access	Concerned access.
 	 * @param s			State before access.
@@ -399,8 +430,11 @@ public:
 		access.print(cerr, poly);
 		cerr << " ... mcount = ";
 #endif
+
+		// T access
 		if(access.ref() == poly.top) {
 			(*STAT(access)).nc++;
+			assignCat(access, cache::NOT_CLASSIFIED);
 #ifdef DEBUG_STATS			
 			cerr << "DEBUG: reference to T\n";
 #endif			
@@ -417,28 +451,36 @@ public:
 		bool persistent = false;
 		for(Node *n = s; n; n = n->next) {
 			if(poly.equals(n->ref, ref)) {
+
+				// always hist case
 				if(must.isAlive(n->must)) {
 #ifdef DEBUG_COUNT_MISSES
 					cerr << "in MUST\n";
 #endif
 					(*STAT(access)).ah++;
+					assignCat(access, cache::ALWAYS_HIT);
 #ifdef DEBUG_STATS
 					cerr << "DEBUG: AH at " << access.inst()->address() << " to "; poly.dump(cerr, access.ref()); cerr << io::endl;
 #endif					
 					return 0; // always hit
 				}
+
+				// persistent case
 				if(pers.isAlive(n->pers)) {
 					persistent = true;
 					(*STAT(access)).pe++;
+					assignCat(access, cache::FIRST_MISS);
 #ifdef DEBUG_STATS					
 					cerr << "DEBUG: PE at " << access.inst()->address() << " to "; poly.dump(cerr, access.ref()); cerr << io::endl;
 #endif					
 					break;
 				}
 			}
+
+			// meet at some points
 			else if((must.isAlive(n->must) || pers.isAlive(n->pers))
-				&& rman.mayMeet(ref, 0, n->ref, n->gen)
-				&& rman.isCompatible(ref, n->ref))
+			&& rman.mayMeet(ref, 0, n->ref, n->gen)
+			&& rman.isCompatible(ref, n->ref))
 				to_scan.add(n);
 		}
 
@@ -447,10 +489,9 @@ public:
 		int mcount = 0;
 		elm::t::uint32 last_tag = -1;
 		RefManager::RefIter iter(ref);
-		if(iter.failed()) // if we could not bound the maxiter of the loop
-		{
-			//cerr << "WARNING: loop bounds not found, cannot count misses\n";
+		if(iter.failed()) { // if we could not bound the maxiter of the loop
 			(*STAT(access)).nc++;
+			assignCat(access, cache::NOT_CLASSIFIED);
 			return UNBOUNDED;
 		}
 		bool is_mm = false;
@@ -479,12 +520,14 @@ public:
 #ifdef DEBUG_STATS				
 				cerr << "DEBUG: MM at " << access.inst()->address() << " to "; poly.dump(cerr, access.ref()); cerr << io::endl;
 #endif
+				assignCat(access, cache::NOT_CLASSIFIED);
 			}
 			else {
 				(*STAT(access)).am++;
 #ifdef DEBUG_STATS				
 				cerr << "DEBUG: AM at " << access.inst()->address() << " to "; poly.dump(cerr, access.ref()); cerr << io::endl;
 #endif
+				assignCat(access, cache::NOT_CLASSIFIED);
 			}
 		}
 

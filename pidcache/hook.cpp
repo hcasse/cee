@@ -23,7 +23,9 @@
 #include <otawa/ilp/expr.h>
 #include <otawa/ipet.h>
 #include <otawa/proc/ProcessorPlugin.h>
+#include <otawa/etime/features.h>
 
+#include "features.h"
 #include "PIDCache.h"
 #include "PolyAnalysis.h"
 
@@ -169,6 +171,110 @@ p::declare WCETFunctionBuilder::reg = p::init("otawa::pidcache::WCETFunctionBuil
 	.provide(WCET_FUNCTION_FEATURE)
 	.base(BBProcessor::reg)
 	.maker<WCETFunctionBuilder>();
+
+
+/**
+ * Build the events for the PID analysis.
+ * 
+ * @ingroup pidcache
+ */
+class EventBuilder: public BBProcessor {
+public:
+	static p::declare reg;
+	EventBuilder(p::declare& r = reg): BBProcessor(r), mem(0), poly(0) { }
+
+private:
+	class Event: public etime::Event {
+	public:
+		Event(const PolyAccess& acc, ot::time cost)
+			: etime::Event(acc.inst()), _c(cost), _acc(acc) { }
+		virtual etime::kind_t kind(void) const { return etime::MEM; }
+		virtual ot::time cost(void) const { return _c; }
+		virtual etime::type_t type(void) const { return etime::BLOCK; }
+		virtual etime::occurrence_t occurrence(void) const {
+			switch(cache::CATEGORY(_acc)) {
+			case cache::ALWAYS_MISS:	return etime::ALWAYS;
+			case cache::ALWAYS_HIT:		return etime::NEVER;
+			default:					return etime::SOMETIMES;
+			}
+		}
+		virtual cstring name(void) const { return "PID data cache"; }
+		virtual string detail(void) const { return _ << "PID data cache " << cache::CATEGORY(_acc); }
+
+		virtual int weight(void) const {
+			int w = 1;
+			BasicBlock *rel = RELATIVE_TO(_acc);
+			if(rel)
+				w = WEIGHT(rel);
+			return MISS_COUNT(_acc) * w;
+		}
+
+		virtual bool isEstimating(bool on) { return on; }
+		
+		virtual void estimate(ilp::Constraint *cons, bool on) {
+			if(on)
+				cons->addLeft(1, MISS_VAR(_acc));
+		}
+		
+	private:
+		ot::time _c;
+		const PolyAccess& _acc;
+	};
+
+protected:
+
+	virtual void setup(WorkSpace *ws) {
+		mem = hard::MEMORY(ws);
+		ASSERT(mem);
+		PolyManager *man = pidcache::POLY_MANAGER(ws);
+		ASSERT(man);
+		poly = &man->poly();
+	}
+
+	virtual void processBB(WorkSpace *ws, CFG *cfg, BasicBlock *bb) {		
+		if(bb->isEnd())
+			return;
+		Bag<PolyAccess>& accesses = *ACCESSES(bb);
+		for(int i = 0; i < accesses.count(); i++) {
+			
+			// get the miss count
+			miss_count_t miss = MISS_COUNT(accesses[i]);
+			//if(!miss)
+			//	continue;
+
+			// compute the access time
+			ot::time time;
+			if(poly->equals(accesses[i].ref(), poly->top))
+				time = accesses[i].access() == PolyAccess::LOAD ? mem->worstReadAccess() : mem->worstWriteAccess();
+			else {
+				const hard::Bank *b = mem->get(Address(poly->base(accesses[i].ref())));
+				if(!b)
+					throw ProcessorException(*this, _ << "access to " << Address(poly->base(accesses[i].ref())) << " at " << accesses[i].inst()->address() << " does not point into known memory bank.");
+				time = accesses[i].access() == PolyAccess::LOAD ? b->latency() : b->writeLatency();
+			}
+			
+			// create the event
+			etime::EVENT(bb).add(new Event(accesses[i], time));
+		}
+	}
+
+private:
+	const hard::Memory *mem;
+	Poly *poly;
+};
+
+
+/**
+ * This feature ensures that the events relative to the PID analysis
+ * are built.
+ */
+p::feature EVENT_FEATURE("otawa::pidcache::EVENT_FEATURE", new Maker<EventBuilder>());
+
+
+p::declare EventBuilder::reg = p::init("otawa::pidcache::EventBuilder", Version(1, 0, 0))
+	.require(CONSTRAINTS_FEATURE)
+	.maker<EventBuilder>();
+
 
 
 // Plugin declaration
